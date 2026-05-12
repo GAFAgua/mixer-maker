@@ -1,0 +1,6 @@
+{
+  "name": "GrooveBox",
+  "description": "A real-time synthesizer and loop sequencer allowing you to play the keyboard, record your phrases as modular blocks, and arrange them into tracks to build complete musical loops.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
