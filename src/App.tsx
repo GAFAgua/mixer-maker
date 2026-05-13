@@ -7,7 +7,7 @@ import Keyboard from './components/Keyboard';
 import Library from './components/Library';
 import Stage from './components/Stage';
 import SynthDeck from './components/SynthDeck';
-import { Play, Square, Circle, CircleSlash, Bell } from 'lucide-react';
+import { Play, Square, Circle, CircleSlash, Bell, Mic } from 'lucide-react';
 
 const getChordNotes = (root: number, mode: PlayMode): number[] => {
   switch (mode) {
@@ -39,6 +39,7 @@ const getChordNotes = (root: number, mode: PlayMode): number[] => {
 export default function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [isRecordingSampler, setIsRecordingSampler] = useState(false);
   const [bpm, setBpm] = useState(120);
   const [instrument1, setInstrument1] = useState<InstrumentType>('synth');
   const [playMode1, setPlayMode1] = useState<PlayMode>('single');
@@ -162,8 +163,8 @@ export default function App() {
         if (recordedNotesRef.current.length > 0 && totalDurationMs > 500) {
            const secondsPerBar = (60 / bpm) * 4;
            const totalDurationSecs = totalDurationMs / 1000;
-           // Round up to the nearest bar to determine the loop length of the clip
-           const durationBars = Math.max(1, Math.ceil(totalDurationSecs / secondsPerBar));
+           // Round to the nearest bar to determine the loop length of the clip
+           const durationBars = Math.max(1, Math.round(totalDurationSecs / secondsPerBar));
 
            const newClip: Clip = {
               id: Date.now().toString(),
@@ -178,7 +179,8 @@ export default function App() {
                       midiNote: n.midiNote,
                       startSecs: rawStart, 
                       durationSecs: rawDuration,
-                      velocity: n.velocity
+                      velocity: n.velocity,
+                      instrument: n.instrument
                   };
               })
            };
@@ -189,6 +191,21 @@ export default function App() {
         recordedNotesRef.current = [];
     }
   }, [isRecording, clips.length, bpm, instrument1]);
+
+  const handleRecordSample = async () => {
+    if (isRecordingSampler) return;
+    setIsRecordingSampler(true);
+    try {
+       await audioEngine.recordSample(1500); // 1.5 second sample limit
+    } catch(e: any) {
+       const msg = e?.name === 'NotFoundError' ? "No microphone found. Using a fallback synthetic sound." :
+                   e?.name === 'NotAllowedError' ? "Microphone access denied. Using a fallback synthetic sound." :
+                   "Failed to record voice sample (" + (e?.message || "unknown") + "). Using a fallback synthetic sound.";
+       alert(msg);
+    } finally {
+       setIsRecordingSampler(false);
+    }
+  };
 
   // Keyboard Handlers
   const handleNoteOn = (rootNote: number, deckIndex: 1 | 2, keyMatch: string) => {
@@ -220,7 +237,8 @@ export default function App() {
            midiNote: n,
            startRaw: Date.now(),
            rootMidi: rootNote,
-           velocity: velocity
+           velocity: velocity,
+           instrument: currentInstrument
         });
       });
     }
@@ -329,6 +347,14 @@ export default function App() {
              
              <div className="flex items-center gap-1">
                <button
+                 onClick={handleRecordSample}
+                 className={`w-6 h-6 flex items-center justify-center rounded transition-all duration-300 ${isRecordingSampler ? 'text-red-400 bg-red-400/20 shadow-[0_0_10px_rgba(248,113,113,0.5)] animate-pulse' : 'text-zinc-500 hover:text-red-400 hover:bg-white/10'}`}
+                 title="Record Voice Sample for Sampler Instrument"
+               >
+                 <Mic size={12} />
+               </button>
+               <div className="h-3 w-px bg-white/10 mx-1"></div>
+               <button
                  onClick={() => setMetronomeEnabled(!metronomeEnabled)}
                  className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${metronomeEnabled ? 'text-cyan-400 bg-cyan-400/10' : 'text-zinc-500 hover:text-zinc-300'}`}
                  title="Toggle Metronome"
@@ -361,9 +387,12 @@ export default function App() {
             
             <button 
                onClick={() => {
-                  if (!isRecording && recordingStartTime.current) {
-                    recordingStartTime.current = null;
+                  if (!isRecording) {
+                    // Start recording immediately to capture rests at the beginning
+                    recordingStartTime.current = Date.now();
                     recordedNotesRef.current = [];
+                  } else {
+                    // It will be finalized in the useEffect
                   }
                   setIsRecording(!isRecording);
                }}

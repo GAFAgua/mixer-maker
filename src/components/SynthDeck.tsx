@@ -35,7 +35,7 @@ export default function SynthDeck({
                   <h3 className="text-[9px] lg:text-[10px] font-bold text-zinc-400 tracking-[0.2em] uppercase">{deckName} Inst</h3>
                </div>
                <div className="grid grid-cols-2 gap-1.5 lg:gap-2">
-                 {(['bass', 'drum', 'cymbal', 'synth'] as const).map(inst => (
+                 {(['bass', 'drum', 'cymbal', 'synth', 'sampler'] as const).map(inst => (
                     <button 
                       key={inst}
                       onClick={() => setInstrument(inst)}

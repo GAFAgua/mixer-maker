@@ -1,4 +1,4 @@
-export type InstrumentType = 'bass' | 'drum' | 'cymbal' | 'synth';
+export type InstrumentType = 'bass' | 'drum' | 'cymbal' | 'synth' | 'sampler';
 
 export type PlayMode = 'single' | 'diatonic' | 'major' | 'minor' | 'power';
 
@@ -7,6 +7,7 @@ export interface NoteEvent {
   startSecs: number; // Start time relative to clip start
   durationSecs: number; // Length of the note
   velocity?: number; // Added to prevent loud overlay
+  instrument?: InstrumentType; // The instrument used to record this note
 }
 
 export interface Clip {
@@ -32,4 +33,5 @@ export interface LiveNote {
   stopRaw?: number; // optional stop time, recorded when key is lifted
   rootMidi?: number; // physical key pressed to trigger this note
   velocity?: number; // the derived volume at recording time
+  instrument?: InstrumentType;
 }
