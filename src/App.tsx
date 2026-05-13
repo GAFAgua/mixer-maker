@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Clip, Track, LiveNote, InstrumentType, PlayMode } from './types';
 import { getRandomColor } from './lib/constants';
+import { GRID_PADS_1, GRID_PADS_2 } from './lib/constants';
 import { audioEngine } from './lib/audioEngine';
 import Keyboard from './components/Keyboard';
 import Library from './components/Library';
 import Stage from './components/Stage';
+import SynthDeck from './components/SynthDeck';
 import { Play, Square, Circle, CircleSlash, Bell } from 'lucide-react';
 
 const getChordNotes = (root: number, mode: PlayMode): number[] => {
@@ -38,8 +40,10 @@ export default function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [bpm, setBpm] = useState(120);
-  const [currentInstrument, setCurrentInstrument] = useState<InstrumentType>('synth');
-  const [playMode, setPlayMode] = useState<PlayMode>('single');
+  const [instrument1, setInstrument1] = useState<InstrumentType>('synth');
+  const [playMode1, setPlayMode1] = useState<PlayMode>('single');
+  const [instrument2, setInstrument2] = useState<InstrumentType>('drum');
+  const [playMode2, setPlayMode2] = useState<PlayMode>('single');
   
   const [metronomeEnabled, setMetronomeEnabled] = useState(false);
   const [metronomeSound, setMetronomeSound] = useState<'click' | 'beep' | 'wood'>('click');
@@ -59,9 +63,9 @@ export default function App() {
   const recordingStartTime = useRef<number | null>(null);
   const recordedNotesRef = useRef<LiveNote[]>([]);
   
-  // Realtime Active Audio Nodes (Key: physical root midi note)
-  const activeAudiosRef = useRef<Map<number, (() => void)[]>>(new Map());
-  const [activeNotes, setActiveNotes] = useState<Set<number>>(new Set()); // Only for visual Keyboard state
+  // Realtime Active Audio Nodes (Key: deck-midi)
+  const activeAudiosRef = useRef<Map<string, (() => void)[]>>(new Map());
+  const [activeNotes, setActiveNotes] = useState<Set<string>>(new Set()); // Only for visual Keyboard state
 
   // Engine refs for the scheduler
   const tracksRef = useRef(tracks);
@@ -70,14 +74,19 @@ export default function App() {
   useEffect(() => { tracksRef.current = tracks; }, [tracks]);
   useEffect(() => { clipsRef.current = clips; }, [clips]);
 
+  const isPlayingRef = useRef(isPlaying);
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+    if (!isPlaying && !metronomeEnabled) {
+      audioEngine.stopAll();
+      setVisualBeat(-1);
+    } else {
+      audioEngine.resume(); // Ensure context is awake
+    }
+  }, [isPlaying, metronomeEnabled]);
+
   // Audio Sequencer Loop (Incredibox style: continuous looping of single clips per track)
   useEffect(() => {
-    if (!isPlaying) {
-      audioEngine.stopAll();
-      return;
-    }
-    
-    audioEngine.resume(); // Ensure context is awake
     // Global tick length is 1 Bar (4 beats). 
     // Clips schedule themselves if the current global bar modulo their length is 0.
     const secondsPerBar = (60 / bpm) * 4;
@@ -87,24 +96,33 @@ export default function App() {
     let logicalBar = 0;
     
     const interval = setInterval(() => {
+      if (!isPlayingRef.current && !metronomeEnabledRef.current) {
+        // Keeps the clock synced to 'now' while stopped, so it starts immediately when toggled
+        nextBarTime = audioEngine.context.currentTime;
+        logicalBar = 0;
+        return;
+      }
+
       const now = audioEngine.context.currentTime;
       // If we are close to the next loop scheduling point (0.1s lookahead)
       if (now >= nextBarTime - 0.1) {
         
         // Schedule all active clips
-        tracksRef.current.forEach(t => {
-          if (t.muted) return;
-          const clipId = t.activeClipId;
-          if (clipId) {
-            const clip = clipsRef.current.find(c => c.id === clipId);
-            if (clip) {
-              // Only schedule this clip if its loop cycle starts at the current logical bar
-              if (logicalBar % clip.durationBars === 0) {
-                 audioEngine.scheduleClip(clip, nextBarTime, t.volume);
+        if (isPlayingRef.current) {
+          tracksRef.current.forEach(t => {
+            if (t.muted) return;
+            const clipId = t.activeClipId;
+            if (clipId) {
+              const clip = clipsRef.current.find(c => c.id === clipId);
+              if (clip) {
+                // Only schedule this clip if its loop cycle starts at the current logical bar
+                if (logicalBar % clip.durationBars === 0) {
+                   audioEngine.scheduleClip(clip, nextBarTime, t.volume);
+                }
               }
             }
-          }
-        });
+          });
+        }
         
         const beatDuration = 60 / bpm;
         // Schedule metronome & visual cues for the next 4 beats
@@ -115,10 +133,12 @@ export default function App() {
                 audioEngine.playMetronome(beatTime, b === 0, metronomeSoundRef.current);
             }
             
-            const timeUntilBeat = Math.max(0, beatTime - audioEngine.context.currentTime);
-            setTimeout(() => {
-                setVisualBeat(b);
-            }, timeUntilBeat * 1000);
+            if (isPlayingRef.current || metronomeEnabledRef.current) {
+                const timeUntilBeat = Math.max(0, beatTime - audioEngine.context.currentTime);
+                setTimeout(() => {
+                    setVisualBeat(b);
+                }, timeUntilBeat * 1000);
+            }
         }
 
         // Advance Time
@@ -132,7 +152,7 @@ export default function App() {
       audioEngine.stopAll();
       setVisualBeat(-1);
     };
-  }, [isPlaying, bpm]);
+  }, [bpm]);
 
   // Handle finalization of the recording buffer when 'isRecording' turns false
   useEffect(() => {
@@ -149,7 +169,7 @@ export default function App() {
               id: Date.now().toString(),
               name: `Mod ${clips.length + 1}`,
               color: getRandomColor(),
-              instrument: currentInstrument,
+              instrument: instrument1,
               durationBars: durationBars, 
               notes: recordedNotesRef.current.map(n => {
                   const rawStart = (n.startRaw - recordingStartTime.current!) / 1000;
@@ -157,7 +177,8 @@ export default function App() {
                   return {
                       midiNote: n.midiNote,
                       startSecs: rawStart, 
-                      durationSecs: rawDuration
+                      durationSecs: rawDuration,
+                      velocity: n.velocity
                   };
               })
            };
@@ -167,22 +188,25 @@ export default function App() {
         recordingStartTime.current = null;
         recordedNotesRef.current = [];
     }
-  }, [isRecording, clips.length, bpm, currentInstrument]);
+  }, [isRecording, clips.length, bpm, instrument1]);
 
   // Keyboard Handlers
-  const handleNoteOn = (rootNote: number) => {
-    if (activeAudiosRef.current.has(rootNote)) return; // prevent duplicate fires
+  const handleNoteOn = (rootNote: number, deckIndex: 1 | 2, keyMatch: string) => {
+    const audioKey = `${deckIndex}-${rootNote}`;
+    if (activeAudiosRef.current.has(audioKey)) return; // prevent duplicate fires
     
+    const playMode = deckIndex === 1 ? playMode1 : playMode2;
+    const currentInstrument = deckIndex === 1 ? instrument1 : instrument2;
     const notesToPlay = getChordNotes(rootNote, playMode);
     
     // Play all notes, dividing volume so chords aren't overwhelmingly loud
     const stopFns = notesToPlay.map(n => audioEngine.playRealtime(n, currentInstrument, 1 / Math.max(1, notesToPlay.length * 0.7)));
     
-    activeAudiosRef.current.set(rootNote, stopFns);
+    activeAudiosRef.current.set(audioKey, stopFns);
 
     setActiveNotes(prev => {
         const next = new Set(prev);
-        next.add(rootNote);
+        next.add(keyMatch);
         return next;
     });
 
@@ -190,26 +214,29 @@ export default function App() {
       if (!recordingStartTime.current) {
          recordingStartTime.current = Date.now();
       }
+      const velocity = 1 / Math.max(1, notesToPlay.length * 0.7);
       notesToPlay.forEach(n => {
         recordedNotesRef.current.push({
            midiNote: n,
            startRaw: Date.now(),
-           rootMidi: rootNote
+           rootMidi: rootNote,
+           velocity: velocity
         });
       });
     }
   };
 
-  const handleNoteOff = (rootNote: number) => {
-    const stopFns = activeAudiosRef.current.get(rootNote);
+  const handleNoteOff = (rootNote: number, deckIndex: 1 | 2, keyMatch: string) => {
+    const audioKey = `${deckIndex}-${rootNote}`;
+    const stopFns = activeAudiosRef.current.get(audioKey);
     if (stopFns) {
       stopFns.forEach(fn => fn());
-      activeAudiosRef.current.delete(rootNote);
+      activeAudiosRef.current.delete(audioKey);
     }
 
     setActiveNotes(prev => {
         const next = new Set(prev);
-        next.delete(rootNote);
+        next.delete(keyMatch);
         return next;
     });
 
@@ -282,15 +309,21 @@ export default function App() {
                 ))}
              </div>
 
-             <span className="text-[10px] font-mono font-medium text-zinc-500 tracking-widest ml-1">BPM</span>
-             <input 
-                type="range" 
-                min="60" max="200" 
-                value={bpm} 
-                onChange={e => setBpm(parseInt(e.target.value))} 
-                className="w-20"
-             />
-             <span className="text-xs font-mono font-bold text-cyan-400 w-7 text-right">{bpm}</span>
+             <span className="text-[10px] font-mono font-medium text-zinc-500 tracking-widest ml-1 mr-2">TEMPO</span>
+             <div className="flex items-center gap-1">
+               <button 
+                  onClick={() => setBpm(80)}
+                  className={`px-2 py-1 rounded-sm text-[10px] font-bold tracking-wider transition-colors ${bpm <= 80 ? 'bg-cyan-500/20 text-cyan-400' : 'bg-white/5 text-zinc-500 hover:text-zinc-300 hover:bg-white/10'}`}
+               >SLOW</button>
+               <button 
+                  onClick={() => setBpm(120)}
+                  className={`px-2 py-1 rounded-sm text-[10px] font-bold tracking-wider transition-colors ${(bpm > 80 && bpm < 160) ? 'bg-cyan-500/20 text-cyan-400' : 'bg-white/5 text-zinc-500 hover:text-zinc-300 hover:bg-white/10'}`}
+               >MID</button>
+               <button 
+                  onClick={() => setBpm(160)}
+                  className={`px-2 py-1 rounded-sm text-[10px] font-bold tracking-wider transition-colors ${bpm >= 160 ? 'bg-cyan-500/20 text-cyan-400' : 'bg-white/5 text-zinc-500 hover:text-zinc-300 hover:bg-white/10'}`}
+               >FAST</button>
+             </div>
 
              <div className="h-4 w-px bg-white/10 mx-2"></div>
              
@@ -362,61 +395,35 @@ export default function App() {
       </div>
 
       {/* Bottom Panel (Synth + Keyboard) */}
-      <div className="bg-[#050505] border-t border-white/10 p-6 flex shrink-0 gap-8 z-20">
-        
-        {/* Synth Settings */}
-        <div className="w-80 bg-white/[0.02] border border-white/5 p-5 rounded-lg flex flex-col gap-6 hidden md:flex shrink-0">
-           <div>
-             <div className="flex items-center gap-2 mb-4">
-                <div className="w-1.5 h-1.5 rounded-full bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.8)]"></div>
-                <h3 className="text-[10px] font-bold text-zinc-400 tracking-[0.2em] uppercase">Oscillator</h3>
-             </div>
-             
-             <div className="grid grid-cols-2 gap-2">
-               {(['bass', 'drum', 'cymbal', 'synth'] as const).map(inst => (
-                  <button 
-                    key={inst}
-                    onClick={() => setCurrentInstrument(inst)}
-                    className={`py-2 px-1 text-[10px] font-medium tracking-wider uppercase rounded transition-all duration-300
-                      ${currentInstrument === inst ? 'bg-purple-500/10 border border-purple-500/30 text-purple-300 shadow-[0_0_10px_rgba(168,85,247,0.1)]' : 'bg-white/5 border border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-white/10'}`}
-                  >
-                    {inst}
-                  </button>
-               ))}
-             </div>
-           </div>
-
-           <div>
-             <div className="flex items-center gap-2 mb-4">
-                <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]"></div>
-                <h3 className="text-[10px] font-bold text-zinc-400 tracking-[0.2em] uppercase">Play Mode</h3>
-             </div>
-             
-             <div className="grid grid-cols-3 gap-2">
-               {(['single', 'diatonic', 'major', 'minor', 'power'] as const).map(mode => (
-                  <button 
-                    key={mode}
-                    onClick={() => setPlayMode(mode)}
-                    className={`py-2 px-1 text-[9px] font-medium tracking-wider uppercase rounded transition-all duration-300
-                      ${playMode === mode ? 'bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 shadow-[0_0_10px_rgba(34,211,238,0.1)]' : 'bg-white/5 border border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-white/10'}`}
-                  >
-                    {mode}
-                  </button>
-               ))}
-             </div>
-           </div>
-           
-           <div className="mt-auto pt-4 border-t border-white/5 flex items-center justify-between">
-             <p className="text-[9px] text-zinc-600 font-mono tracking-widest uppercase">Use Keyboard (A-L)</p>
-             <p className="text-[9px] text-zinc-500 font-mono tracking-widest uppercase">C-Major Map</p>
-           </div>
-        </div>
-
-        {/* Keyboard Map */}
-        <div className="flex-1 flex flex-col justify-end">
-           <Keyboard onNoteOn={handleNoteOn} onNoteOff={handleNoteOff} activeNotes={activeNotes} />
-        </div>
-        
+      <div className="bg-[#050505] border-t border-white/10 p-4 md:p-6 flex shrink-0 gap-6 lg:gap-8 z-20 overflow-x-auto justify-center">
+         <SynthDeck 
+           deckName="Deck A"
+           colorHex="#a855f7"
+           colorClass="purple"
+           instrument={instrument1}
+           setInstrument={setInstrument1}
+           playMode={playMode1}
+           setPlayMode={setPlayMode1}
+           pads={GRID_PADS_1}
+           activeNotes={activeNotes}
+           onNoteOn={(n, keyMatch) => handleNoteOn(n, 1, keyMatch)}
+           onNoteOff={(n, keyMatch) => handleNoteOff(n, 1, keyMatch)}
+           keysDesc="Left Keys (1-v)"
+         />
+         <SynthDeck 
+           deckName="Deck B"
+           colorHex="#22d3ee"
+           colorClass="cyan"
+           instrument={instrument2}
+           setInstrument={setInstrument2}
+           playMode={playMode2}
+           setPlayMode={setPlayMode2}
+           pads={GRID_PADS_2}
+           activeNotes={activeNotes}
+           onNoteOn={(n, keyMatch) => handleNoteOn(n, 2, keyMatch)}
+           onNoteOff={(n, keyMatch) => handleNoteOff(n, 2, keyMatch)}
+           keysDesc="Right Keys (7-p)"
+         />
       </div>
     </div>
   );

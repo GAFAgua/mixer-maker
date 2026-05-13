@@ -1,24 +1,49 @@
 export const TOTAL_BARS = 16; // A timeline consisting of 16 bars (blocks)
 
-// A standard 2-octave C-Major based layout mapped to PC Keyboard
-export const PIANO_KEYS = [
-  { midi: 60, note: "C4", isBlack: false, keyMatch: "a" },
-  { midi: 61, note: "C#4", isBlack: true, keyMatch: "w" },
-  { midi: 62, note: "D4", isBlack: false, keyMatch: "s" },
-  { midi: 63, note: "D#4", isBlack: true, keyMatch: "e" },
-  { midi: 64, note: "E4", isBlack: false, keyMatch: "d" },
-  { midi: 65, note: "F4", isBlack: false, keyMatch: "f" },
-  { midi: 66, note: "F#4", isBlack: true, keyMatch: "t" },
-  { midi: 67, note: "G4", isBlack: false, keyMatch: "g" },
-  { midi: 68, note: "G#4", isBlack: true, keyMatch: "y" },
-  { midi: 69, note: "A4", isBlack: false, keyMatch: "h" },
-  { midi: 70, note: "A#4", isBlack: true, keyMatch: "u" },
-  { midi: 71, note: "B4", isBlack: false, keyMatch: "j" },
-  { midi: 72, note: "C5", isBlack: false, keyMatch: "k" },
-  { midi: 73, note: "C#5", isBlack: true, keyMatch: "o" },
-  { midi: 74, note: "D5", isBlack: false, keyMatch: "l" },
-  { midi: 75, note: "D#5", isBlack: true, keyMatch: "p" },
-  { midi: 76, note: "E5", isBlack: false, keyMatch: ";" },
+export const GRID_PADS_1 = [
+  // Row 1 (Top)
+  { midi: 60, note: 'C4', keyMatch: '1' },
+  { midi: 61, note: 'C#4', keyMatch: '2' },
+  { midi: 62, note: 'D4', keyMatch: '3' },
+  { midi: 63, note: 'D#4', keyMatch: '4' },
+  // Row 2
+  { midi: 56, note: 'G#3', keyMatch: 'q' },
+  { midi: 57, note: 'A3', keyMatch: 'w' },
+  { midi: 58, note: 'A#3', keyMatch: 'e' },
+  { midi: 59, note: 'B3', keyMatch: 'r' },
+  // Row 3
+  { midi: 52, note: 'E3', keyMatch: 'a' },
+  { midi: 53, note: 'F3', keyMatch: 's' },
+  { midi: 54, note: 'F#3', keyMatch: 'd' },
+  { midi: 55, note: 'G3', keyMatch: 'f' },
+  // Row 4 (Bottom)
+  { midi: 48, note: 'C3', keyMatch: 'z' },
+  { midi: 49, note: 'C#3', keyMatch: 'x' },
+  { midi: 50, note: 'D3', keyMatch: 'c' },
+  { midi: 51, note: 'D#3', keyMatch: 'v' },
+];
+
+export const GRID_PADS_2 = [
+  // Row 1 (Top)
+  { midi: 72, note: 'C5', keyMatch: '7' },
+  { midi: 73, note: 'C#5', keyMatch: '8' },
+  { midi: 74, note: 'D5', keyMatch: '9' },
+  { midi: 75, note: 'D#5', keyMatch: '0' },
+  // Row 2
+  { midi: 68, note: 'G#4', keyMatch: 'u' },
+  { midi: 69, note: 'A4', keyMatch: 'i' },
+  { midi: 70, note: 'A#4', keyMatch: 'o' },
+  { midi: 71, note: 'B4', keyMatch: 'p' },
+  // Row 3
+  { midi: 64, note: 'E4', keyMatch: 'h' },
+  { midi: 65, note: 'F4', keyMatch: 'j' },
+  { midi: 66, note: 'F#4', keyMatch: 'k' },
+  { midi: 67, note: 'G4', keyMatch: 'l' },
+  // Row 4 (Bottom)
+  { midi: 60, note: 'C4', keyMatch: 'b' },
+  { midi: 61, note: 'C#4', keyMatch: 'n' },
+  { midi: 62, note: 'D4', keyMatch: 'm' },
+  { midi: 63, note: 'D#4', keyMatch: ',' },
 ];
 
 export const COLORS = [

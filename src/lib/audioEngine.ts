@@ -3,14 +3,25 @@ import { Clip, InstrumentType } from '../types';
 class AudioEngine {
   context: AudioContext;
   masterGain: GainNode;
+  compressor: DynamicsCompressorNode;
   activeOscillators: Set<OscillatorNode | AudioBufferSourceNode> = new Set();
   noiseBuffer: AudioBuffer | null = null;
 
   constructor() {
     this.context = new (window.AudioContext || (window as any).webkitAudioContext)();
+    
+    // Add a compressor to prevent clipping when playing chords, allowing for higher base volume
+    this.compressor = this.context.createDynamicsCompressor();
+    this.compressor.threshold.setValueAtTime(-15, this.context.currentTime);
+    this.compressor.knee.setValueAtTime(30, this.context.currentTime);
+    this.compressor.ratio.setValueAtTime(12, this.context.currentTime);
+    this.compressor.attack.setValueAtTime(0.003, this.context.currentTime);
+    this.compressor.release.setValueAtTime(0.25, this.context.currentTime);
+    this.compressor.connect(this.context.destination);
+
     this.masterGain = this.context.createGain();
-    this.masterGain.connect(this.context.destination);
-    this.masterGain.gain.value = 0.25; // Lower overall volume to provide headroom for large chords
+    this.masterGain.connect(this.compressor);
+    this.masterGain.gain.value = 1.2; // Increased volume overall, compressor will handle peaks
     this.initNoiseBuffer();
   }
 
@@ -95,7 +106,7 @@ class AudioEngine {
       osc.frequency.value = freq;
       
       gain.gain.setValueAtTime(0, t);
-      gain.gain.linearRampToValueAtTime(volume * 0.3, t + 0.05);
+      gain.gain.linearRampToValueAtTime(volume * 0.8, t + 0.05);
 
       osc.connect(filter);
       filter.connect(gain);
@@ -123,7 +134,7 @@ class AudioEngine {
       osc.frequency.value = freq / 2; // Drop an octave
       
       gain.gain.setValueAtTime(0, t);
-      gain.gain.linearRampToValueAtTime(volume * 0.6, t + 0.02);
+      gain.gain.linearRampToValueAtTime(volume * 1.5, t + 0.02);
       
       osc.connect(gain);
       gain.connect(this.masterGain);
@@ -152,7 +163,7 @@ class AudioEngine {
        osc.frequency.setValueAtTime(freq / 2, t);
        osc.frequency.exponentialRampToValueAtTime(30, t + 0.1); // Quick drop
        
-       gain.gain.setValueAtTime(volume, t);
+       gain.gain.setValueAtTime(volume * 2, t);
        gain.gain.exponentialRampToValueAtTime(0.01, t + 0.3);
        
        osc.connect(gain);
@@ -170,7 +181,7 @@ class AudioEngine {
        filter.frequency.value = 4000;
        
        const gain = this.context.createGain();
-       gain.gain.setValueAtTime(volume * 0.4, t);
+       gain.gain.setValueAtTime(volume * 1.0, t);
        gain.gain.exponentialRampToValueAtTime(0.01, t + 0.25); // Quick decay
        
        noiseNode.connect(filter);
@@ -210,6 +221,7 @@ class AudioEngine {
       if (d <= 0) return; // Note already finished
       d = Math.max(0.02, d); // enforce minimum 20ms note duration
       
+      const velocity = note.velocity ?? 1;
       const freq = 440 * Math.pow(2, (note.midiNote - 69) / 12);
 
       if (clip.instrument === 'synth') {
@@ -226,7 +238,7 @@ class AudioEngine {
         // ADSR Envelope
         const attackT = Math.min(0.05, d * 0.2);
         const releaseT = Math.min(0.05, d * 0.2);
-        const sustainLevel = trackVolume * 0.3;
+        const sustainLevel = trackVolume * velocity * 0.8;
 
         gain.gain.setValueAtTime(0, t);
         gain.gain.linearRampToValueAtTime(sustainLevel, t + attackT); 
@@ -257,7 +269,7 @@ class AudioEngine {
 
         const attackT = Math.min(0.02, d * 0.2);
         const releaseT = Math.min(0.05, d * 0.2);
-        const sustainLevel = trackVolume * 0.6;
+        const sustainLevel = trackVolume * velocity * 1.5;
 
         gain.gain.setValueAtTime(0, t);
         gain.gain.linearRampToValueAtTime(sustainLevel, t + attackT);
@@ -284,7 +296,7 @@ class AudioEngine {
          osc.frequency.setValueAtTime(freq / 2, t);
          osc.frequency.exponentialRampToValueAtTime(30, t + 0.1); 
          
-         gain.gain.setValueAtTime(trackVolume, t);
+         gain.gain.setValueAtTime(trackVolume * velocity * 2, t);
          gain.gain.exponentialRampToValueAtTime(0.01, t + 0.3);
          
          osc.connect(gain);
@@ -306,7 +318,7 @@ class AudioEngine {
          filter.frequency.setValueAtTime(4000, t);
          
          const gain = this.context.createGain();
-         gain.gain.setValueAtTime(trackVolume * 0.4, t);
+         gain.gain.setValueAtTime(trackVolume * velocity * 1.0, t);
          gain.gain.exponentialRampToValueAtTime(0.01, t + 0.25);
          
          noiseNode.connect(filter);

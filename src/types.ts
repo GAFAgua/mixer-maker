@@ -6,6 +6,7 @@ export interface NoteEvent {
   midiNote: number;
   startSecs: number; // Start time relative to clip start
   durationSecs: number; // Length of the note
+  velocity?: number; // Added to prevent loud overlay
 }
 
 export interface Clip {
@@ -30,4 +31,5 @@ export interface LiveNote {
   startRaw: number; // raw Date.now() timestamp when recording started
   stopRaw?: number; // optional stop time, recorded when key is lifted
   rootMidi?: number; // physical key pressed to trigger this note
+  velocity?: number; // the derived volume at recording time
 }
